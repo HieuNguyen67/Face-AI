@@ -4,20 +4,9 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Form from "react-bootstrap/Form";
 import logo from "../../page/image/user_new.png"
-import personNamesData from "../FaceRecognition/images.json";
 
 function FaceRecognitionImage() {
-  const [personNames, setPersonNames] = useState([]);
 
-  useEffect(() => {
-    // Xử lý dữ liệu từ tệp JSON
-    const processedPersonNames = personNamesData.map(
-      ({ folderName }) => folderName
-    );
-
-    // Đặt giá trị personNames
-    setPersonNames(processedPersonNames);
-  }, []);
   const imageRef = useRef(null);
 
   useEffect(() => {
@@ -38,22 +27,29 @@ function FaceRecognitionImage() {
       .withFaceLandmarks()
       .withFaceDescriptors();
 
-    const labeledDescriptors = await Promise.all(
-      personNames.map(async (personName) => {
-        const descriptors = await Promise.all(
-          Array.from(Array(2).keys()).map(async (__, i) => {
-            const imagePath = `/images/${personName}/${i + 1}.jpg`;
-            const img = await faceapi.fetchImage(imagePath);
-            const detectedFace = await faceapi
-              .detectSingleFace(img)
-              .withFaceLandmarks()
-              .withFaceDescriptor();
-            return detectedFace.descriptor;
-          })
-        );
-        return new faceapi.LabeledFaceDescriptors(personName, descriptors);
-      })
-    );
+   const labeledDescriptors = await Promise.all(
+     [
+       "Nguyễn Minh Hiếu",
+       "Văn Bảo Tâm",
+       "Phan Đức Tiến",
+       "Trần Đức Hải",
+       "Nguyễn Đăng Khoa",
+       "Dương Trung Quốc",
+     ].map(async (personName) => {
+       const descriptors = await Promise.all(
+         Array.from(Array(1).keys()).map(async (__, i) => {
+           const imagePath = `/images/${personName}/${i + 1}.jpg`;
+           const img = await faceapi.fetchImage(imagePath);
+           const detectedFace = await faceapi
+             .detectSingleFace(img)
+             .withFaceLandmarks()
+             .withFaceDescriptor();
+           return detectedFace.descriptor;
+         })
+       );
+       return new faceapi.LabeledFaceDescriptors(personName, descriptors);
+     })
+   );
 
     const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors);
     const canvas = faceapi.createCanvasFromMedia(image);

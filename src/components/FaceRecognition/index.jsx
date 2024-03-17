@@ -6,120 +6,118 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
-import face from "../../page/image/2.jpg"
-import personNamesData from "./images.json";
-import UploadImage from "../UploadImage";
+import face from "../../page/image/2.jpg";
+
 const FaceRecognition = () => {
-  const [personNames, setPersonNames] = useState([]);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [isWebcamOn, setIsWebcamOn] = useState(false);
+  const [detectedPeople, setDetectedPeople] = useState([]);
 
   useEffect(() => {
-    // Xử lý dữ liệu từ tệp JSON
-    const processedPersonNames = personNamesData.map(
-      ({ folderName }) => folderName
-    );
-
-    // Đặt giá trị personNames
-    setPersonNames(processedPersonNames);
+    loadModels();
   }, []);
-     const videoRef = useRef(null);
-     const canvasRef = useRef(null);
-     const [isWebcamOn, setIsWebcamOn] = useState(false);
-     const [detectedPerson, setDetectedPerson] = useState("");
 
-     useEffect(() => {
-       loadModels();
-     }, []);
+  async function loadModels() {
+    const MODEL_URL = "/models";
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  }
 
-     async function loadModels() {
-       const MODEL_URL = "/models";
-       await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-     }
+  async function startVideo() {
+    if (navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then(function (stream) {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = function () {
+              videoRef.current.play();
+              setIsWebcamOn(true);
+              detectFace();
+            };
+          }
+        })
+        .catch(function (err) {
+          console.log("An error occurred: " + err);
+        });
+    }
+  }
 
-     async function startVideo() {
-       if (navigator.mediaDevices.getUserMedia) {
-         navigator.mediaDevices
-           .getUserMedia({ video: true })
-           .then(function (stream) {
-             if (videoRef.current) {
-               videoRef.current.srcObject = stream;
-               videoRef.current.onloadedmetadata = function () {
-                 videoRef.current.play();
-                 setIsWebcamOn(true);
-                 detectFace();
-               };
-             }
-           })
-           .catch(function (err) {
-             console.log("An error occurred: " + err);
-           });
-       }
-     }
-     
+  async function detectFace() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
-     async function detectFace() {
-       const video = videoRef.current;
-       const canvas = canvasRef.current;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const detections = await faceapi
+        .detectAllFaces(video)
+        .withFaceLandmarks()
+        .withFaceDescriptors();
 
-       if (video.readyState === video.HAVE_ENOUGH_DATA) {
-         const detections = await faceapi
-           .detectAllFaces(video)
-           .withFaceLandmarks()
-           .withFaceDescriptors();
+      const labeledDescriptors = await Promise.all(
+        [
+          "Nguyễn Minh Hiếu",
+          "Văn Bảo Tâm",
+          "Phan Đức Tiến",
+          "Trần Đức Hải",
+          "Nguyễn Đăng Khoa",
+          "Dương Trung Quốc"
+        ].map(async (personName) => {
+          const descriptors = await Promise.all(
+            Array.from(Array(1).keys()).map(async (__, i) => {
+              const imagePath = `/images/${personName}/${i + 1}.jpg`;
+              const img = await faceapi.fetchImage(imagePath);
+              const detectedFace = await faceapi
+                .detectSingleFace(img)
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+              return detectedFace.descriptor;
+            })
+          );
+          return new faceapi.LabeledFaceDescriptors(personName, descriptors);
+        })
+      );
 
-         const labeledDescriptors = await Promise.all(
-           personNames.map(async (personName) => {
-             const descriptors = await Promise.all(
-               Array.from(Array(2).keys()).map(async (__, i) => {
-                 const imagePath = `/images/${personName}/${i + 1}.jpg`;
-                 const img = await faceapi.fetchImage(imagePath);
-                 const detectedFace = await faceapi
-                   .detectSingleFace(img)
-                   .withFaceLandmarks()
-                   .withFaceDescriptor();
-                 return detectedFace.descriptor;
-               })
-             );
-             return new faceapi.LabeledFaceDescriptors(personName, descriptors);
-           })
-         );
+      const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors);
+      const newDetectedPeople = [];
 
-         const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors);
+      faceapi.matchDimensions(canvas, video, true);
 
-         faceapi.matchDimensions(canvas, video, true);
+      const resizedDetections = faceapi.resizeResults(detections, {
+        width: video.width,
+        height: video.height,
+      });
+      resizedDetections.forEach((detection) => {
+        const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+        const personName = bestMatch.label;
 
-         const resizedDetections = faceapi.resizeResults(detections, {
-           width: video.width,
-           height: video.height,
-         });
-         resizedDetections.forEach((detection) => {
-           const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-           const box = detection.detection.box;
-           const text = bestMatch.toString();
-           const drawBox = new faceapi.draw.DrawBox(box, { label: text });
-           drawBox.draw(canvas);
+        newDetectedPeople.push(personName);
+         const box = detection.detection.box;
+         const text = bestMatch.toString();
+         const drawBox = new faceapi.draw.DrawBox(box, { label: text });
+         drawBox.draw(canvas);
+      });
 
-           // Set detected person
-           setDetectedPerson(bestMatch.label);
-         });
-       }
+      setDetectedPeople(newDetectedPeople);
+    }
 
-       requestAnimationFrame(detectFace);
-     }
+    requestAnimationFrame(detectFace);
+  }
 
-     const handleStartWebcam = () => {
-       startVideo();
-     };
+  const handleStartWebcam = () => {
+    startVideo();
+  };
 
-     const handleStopWebcam = () => {
-       const stream = videoRef.current.srcObject;
-       const tracks = stream.getTracks();
-       tracks.forEach((track) => {
-         track.stop();
-       });
-       setIsWebcamOn(false);
-     };
+  const handleStopWebcam = () => {
+    const stream = videoRef.current.srcObject;
+    const tracks = stream.getTracks();
+    tracks.forEach((track) => {
+      track.stop();
+    });
+    setIsWebcamOn(false);
+  };
+
   return (
     <>
       <h1
@@ -131,9 +129,8 @@ const FaceRecognition = () => {
       >
         NHẬN DIỆN KHUÔN MẶT BẰNG WEBCAM
       </h1>
-
       <Row className="mt-5 pb-5">
-        <Col className="col-md-4 col-12">
+        <Col className="col-md-3 col-12">
           <Row className="d-flex flex-column">
             <Col>
               {" "}
@@ -165,22 +162,23 @@ const FaceRecognition = () => {
               )}
             </Col>
             <Col>
-              {detectedPerson && (
+              <p className="fw-bold mt-3" style={{ fontSize: "2rem" }}>
+                Xin chào:
+              </p>
+              {detectedPeople.map((person, index) => (
                 <p
-                  style={{ color: "black", fontSize: "3rem" }}
-                  className="fw-bold"
+                  key={index}
+                  style={{ color: "black", fontSize: "2rem" }}
+                  className="fw-bold mt-1"
                 >
-                  Xin chào, {detectedPerson}
+                  {person}
                 </p>
-              )}
-            </Col>
-            <Col>
-              <UploadImage />
+              ))}
             </Col>
           </Row>
         </Col>
         <Col
-          className="col-8 ml-2"
+          className="col-9 ml-2"
           style={{
             display: "flex",
             justifyContent: "center",
