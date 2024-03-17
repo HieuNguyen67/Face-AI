@@ -59,8 +59,14 @@ function FaceRecognitionImage() {
       const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
       const box = detection.detection.box;
       const text = bestMatch.toString();
-      const drawBox = new faceapi.draw.DrawBox(box, { label: text });
-      drawBox.draw(canvas);
+     const drawOptions = {
+       label: text,
+       boxColor: "#ff5722",
+       textColor: "#212121",
+     };
+
+     const drawBox = new faceapi.draw.DrawBox(box, drawOptions);
+     drawBox.draw(canvas);
     });
   }
 
